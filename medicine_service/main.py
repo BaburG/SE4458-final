@@ -1,4 +1,4 @@
-from typing import Union, List
+from typing import Union, List, Set
 from fastapi import FastAPI
 import requests
 from bs4 import BeautifulSoup
@@ -11,6 +11,7 @@ import redis
 import json
 from pydantic import BaseModel
 from dotenv import load_dotenv
+import re
 
 # Load environment variables
 load_dotenv()
@@ -352,6 +353,72 @@ async def find_medicines(request: MedicineListRequest):
         }
         
         return results
+        
+    except Exception as e:
+        return {"error": f"An error occurred: {str(e)}"}
+
+@app.get("/find-similar/{partial_name}")
+async def find_similar(partial_name: str, limit: int = 10):
+    try:
+        # Normalize the search term (uppercase and remove extra spaces)
+        search_term = partial_name.upper().strip()
+        cache_key = f"similar:{search_term}"
+        
+        # Check cache first
+        cached_result = redis_client.get(cache_key)
+        if cached_result is not None:
+            return {
+                "similar_medicines": json.loads(cached_result),
+                "count": len(json.loads(cached_result)),
+                "search_term": partial_name,
+                "source": "cache"
+            }
+        
+        # If not in cache, search in Cosmos DB
+        query = "SELECT * FROM c WHERE IS_DEFINED(c.medicines)"
+        items = list(container.query_items(
+            query=query,
+            enable_cross_partition_query=True
+        ))
+        
+        # Get all medicine names from the database
+        all_medicines: Set[str] = set()
+        for item in items:
+            all_medicines.update(item.get('medicines', {}).keys())
+        
+        # Find similar medicines
+        similar_medicines = []
+        for medicine in all_medicines:
+            # Convert both strings to uppercase for case-insensitive comparison
+            if search_term in medicine.upper():
+                similar_medicines.append(medicine)
+        
+        # Sort by relevance (exact matches first, then by length)
+        similar_medicines.sort(key=lambda x: (
+            not x.upper().startswith(search_term),  # Exact prefix matches first
+            len(x),                                 # Shorter names next
+            x.upper()                              # Alphabetical order
+        ))
+        
+        # Limit results
+        similar_medicines = similar_medicines[:limit]
+        
+        # Cache the results
+        try:
+            redis_client.setex(
+                cache_key,
+                3600,  # 1 hour in seconds
+                json.dumps(similar_medicines)
+            )
+        except redis.RedisError as e:
+            print(f"Failed to cache similar results for {search_term}: {str(e)}")
+        
+        return {
+            "similar_medicines": similar_medicines,
+            "count": len(similar_medicines),
+            "search_term": partial_name,
+            "source": "database"
+        }
         
     except Exception as e:
         return {"error": f"An error occurred: {str(e)}"}
