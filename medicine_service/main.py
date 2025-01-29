@@ -10,15 +10,19 @@ import uuid
 import redis
 import json
 from pydantic import BaseModel
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = FastAPI()
 
 # Cosmos DB settings
 settings = {
-    'host': os.environ.get('ACCOUNT_HOST', 'https://medicine-service-db.documents.azure.com:443/'),
-    'master_key': os.environ.get('ACCOUNT_KEY', 'DnRFPpKpgEpM5EyDXT3WiTeskF5Ut3DQxk536SrT2RBStySOOeAmNXVbtvSOMxiLjgzLvGpridAjACDb8w7QfQ=='),
-    'database_id': os.environ.get('COSMOS_DATABASE', 'ToDoList'),
-    'container_id': os.environ.get('COSMOS_CONTAINER', 'Items'),
+    'host': os.getenv('COSMOS_HOST'),
+    'master_key': os.getenv('COSMOS_KEY'),
+    'database_id': os.getenv('COSMOS_DATABASE'),
+    'container_id': os.getenv('COSMOS_CONTAINER'),
 }
 
 # Initialize Cosmos client
@@ -44,10 +48,10 @@ except Exception as e:
 
 # Initialize Redis client
 redis_client = redis.Redis(
-    host='redis-15622.c300.eu-central-1-1.ec2.redns.redis-cloud.com',
-    port=15622,
-    username='default',
-    password='JPKOMUrVRoOHupFtTsF9WP1gRpUWF7Z2',
+    host=os.getenv('REDIS_HOST'),
+    port=int(os.getenv('REDIS_PORT')),
+    username=os.getenv('REDIS_USERNAME'),
+    password=os.getenv('REDIS_PASSWORD'),
     decode_responses=True
 )
 
