@@ -22,6 +22,10 @@ import {
   ClickAwayListener,
 } from '@mui/material';
 
+const MOCK_API_URL = import.meta.env.VITE_MOCK_API_URL;
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+const PRESCRIPTION_URL = import.meta.env.VITE_PRESCRIPTION_URL;
+
 function App() {
   const [tcId, setTcId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -32,6 +36,7 @@ function App() {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchTimeout, setSearchTimeout] = useState(null);
+  const [prescriptionId, setPrescriptionId] = useState(null);
 
   const theme = useTheme();
   const paleColors = {
@@ -45,7 +50,7 @@ function App() {
   const handleTcSubmit = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get('https://mocki.io/v1/d88264cd-79f7-4bb7-a4f6-b3ac52bebd68');
+      const response = await axios.get(MOCK_API_URL);
       if (response.data.exists) {
         setTimeout(() => {
           setPatientFound(true);
@@ -79,8 +84,31 @@ function App() {
     }
   };
 
-  const handleSubmitPrescription = () => {
-    setPrescriptionSubmitted(true);
+  const handleSubmitPrescription = async () => {
+    try {
+      const prescriptionData = {
+        data: medicines.map(med => [med.name, med.count])
+      };
+
+      console.log('Submitting prescription:', prescriptionData);
+      
+      const response = await axios.post(
+        '/prescription/register-prescription',
+        prescriptionData,
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      console.log('Prescription response:', response.data);
+      setPrescriptionId(response.data.id);
+      setPrescriptionSubmitted(true);
+    } catch (error) {
+      console.error('Error submitting prescription:', error);
+      alert('Failed to submit prescription. Please try again.');
+    }
   };
 
   const searchMedicines = async (searchTerm) => {
@@ -388,7 +416,7 @@ function App() {
                     Prescription submitted successfully!
                   </Typography>
                   <Typography>
-                    Prescription ID: XXX
+                    Prescription ID: {prescriptionId}
                   </Typography>
                 </Paper>
               )}

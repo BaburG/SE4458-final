@@ -1,0 +1,161 @@
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.main-container {
+  background-color: white;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 20px 40px -20px rgba(0, 0, 0, 0.15);
+}
+
+.main-title {
+  color: #1a1b1e;
+  font-size: 2.5rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, #4c6ef5 0%, #3b5bdb 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.prescription-input input {
+  background-color: white;
+}
+
+.submit-button {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
+.error-alert {
+  background-color: #fff5f5;
+  border: 1px solid #ffe3e3;
+  color: #e03131;
+}
+
+.info-card {
+  background-color: white;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  margin-bottom: 2rem;
+}
+
+.section-title {
+  color: #1a1b1e;
+  margin-bottom: 2rem;
+}
+
+.info-group {
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 12px;
+  min-width: 200px;
+}
+
+.field-label {
+  color: #868e96;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.field-value {
+  color: #1a1b1e;
+}
+
+.medications-table {
+  background-color: white;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.medications-table th {
+  background-color: #f8f9fa;
+  color: #1a1b1e;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 1rem 1.5rem;
+  text-align: left;
+  border-bottom: 2px solid #e9ecef;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.medications-table td {
+  padding: 1rem 1.5rem;
+  color: #1a1b1e;
+  font-size: 1rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.table-row:hover {
+  background-color: #f1f3f5;
+}
+
+.pharmacy-container {
+  animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.prescription-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.table-container {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 10px 30px -10px rgba(0, 0, 0, 0.15);
+}
+
+.table-row {
+  transition: background-color 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
