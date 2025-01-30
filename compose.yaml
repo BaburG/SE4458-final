@@ -1,0 +1,118 @@
+version: "3.8"
+
+services:
+  # --------------------
+  # 1) Medicine Service
+  # --------------------
+  medicine_service:
+    build: ./medicine_service
+    container_name: medicine_service
+    # We expose port 8000 inside the container. You can map it to local host if desired.
+    ports:
+      - "8000:8000"
+    environment:
+      # Environment variables for Cosmos DB
+      COSMOS_HOST: "${COSMOS_HOST}"
+      COSMOS_KEY: "${COSMOS_KEY}"
+      COSMOS_DATABASE: "${COSMOS_DATABASE}"
+      COSMOS_CONTAINER: "${COSMOS_CONTAINER}"
+
+      # Environment variables for Redis
+      REDIS_HOST: "${REDIS_HOST}"
+      REDIS_PORT: "${REDIS_PORT}"
+      REDIS_USERNAME: "${REDIS_USERNAME}"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+
+      # (Optional) If you need RabbitMQ from the medicine side, set them too. 
+      # If not needed, you can remove:
+      RABBITMQ_HOST: "${RABBITMQ_HOST}"
+      RABBITMQ_USER: "${RABBITMQ_USER}"
+      RABBITMQ_PASS: "${RABBITMQ_PASS}"
+
+    # If you need, add volumes or restart policies:
+    # volumes:
+    #  - ./medicine_service/downloads:/app/downloads
+    # restart: always
+
+  # ------------------------
+  # 2) Prescription Service
+  # ------------------------
+  prescription_service:
+    build: ./prescription_service
+    container_name: prescription_service
+    ports:
+      - "8001:8000"
+    environment:
+      # Environment variables for DB
+      DB_SERVER: "${DB_SERVER}"
+      DB_NAME: "${DB_NAME}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+
+      # RabbitMQ for event publishing
+      RABBITMQ_HOST: "${RABBITMQ_HOST}"
+      RABBITMQ_USER: "${RABBITMQ_USER}"
+      RABBITMQ_PASS: "${RABBITMQ_PASS}"
+
+  # -----------------------
+  # 3) Notification Service
+  # -----------------------
+  notification_service:
+    build: ./notification_service
+    container_name: notification_service
+    # We typically run it in background without exposing a port,
+    # unless you want to expose metrics or an API:
+    # ports:
+    #  - "8002:8000"
+    environment:
+      # DB connection if we need to query prescription DB
+      DB_SERVER: "${DB_SERVER}"
+      DB_NAME: "${DB_NAME}"
+      DB_USER: "${DB_USER}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+
+      # RabbitMQ for consuming events
+      RABBITMQ_HOST: "${RABBITMQ_HOST}"
+      RABBITMQ_USER: "${RABBITMQ_USER}"
+      RABBITMQ_PASS: "${RABBITMQ_PASS}"
+
+    # The notification_service has an internal scheduler that runs daily.
+    # So no external request is needed for it.
+
+  # -------------------
+  # 4) Doctor Frontend
+  # -------------------
+  doctor_frontend:
+    build: ./doctor_frontend
+    container_name: doctor_frontend
+    ports:
+      - "5173:5173"  # or whatever Vite dev/production port you want
+    environment:
+      VITE_MOCK_API_URL: "${VITE_MOCK_API_URL}"
+      VITE_BACKEND_URL: "http://prescription_service:8000" 
+      VITE_PRESCRIPTION_URL: "http://prescription_service:8000"
+      # or if you have an API Gateway domain, set that instead
+
+    # Depends on "prescription_service" if that is a direct call
+    depends_on:
+      - prescription_service
+
+  # ---------------------
+  # 5) Pharmacy Frontend
+  # ---------------------
+  pharmacy_frontend:
+    build: ./pharmacy_frontend
+    container_name: pharmacy_frontend
+    ports:
+      - "5174:5173"  # or a different port if needed
+    environment:
+      VITE_MOCK_API_URL: "${VITE_MOCK_API_URL}"
+      # If you have a direct call to /prescription, point it to prescription_service 
+      # or to a gateway. 
+      # The config is in your Vite config (vite.config.ts).
+      # By default, we used a proxy to "http://localhost:8001"
+      # But inside Docker, you'd do:
+      #   target: 'http://prescription_service:8000'
+      # so that it can talk container to container.
+    depends_on:
+      - prescription_service
