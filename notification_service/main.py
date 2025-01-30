@@ -1,12 +1,11 @@
 # notification_service/main.py
 
 import os
-import time
 import json
-import pika
-import pyodbc
+import aio_pika
+import asyncio
 from datetime import datetime
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
@@ -34,92 +33,74 @@ CONNECTION_STRING = (
 # RabbitMQ connection
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST")
 RABBITMQ_USER = os.getenv("RABBITMQ_USER")
-RABBITMQ_PASS = os.getenv("RABBITMQ_PASS")
+RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD")
 
 # We'll store incomplete prescriptions in memory for demonstration.
 # In a real system, you'd store them in a DB or keep them updated by queries.
 incomplete_prescriptions = []  # list of dicts: { "id": <int>, "timestamp": <datetime> }
 
-def consume_prescription_events():
-    """Continuously consume events from 'prescription_events' queue."""
-    while True:  # Add retry loop
+async def process_message(message: aio_pika.IncomingMessage):
+    async with message.process():
         try:
-            connection = pika.BlockingConnection(
-                pika.URLParameters(RABBITMQ_HOST)
-            )
-            channel = connection.channel()
-            channel.queue_declare(queue='prescription_events', durable=True)
+            event = json.loads(message.body.decode())
+            event_type = event.get("type")
+            payload = event.get("payload", {})
+            print(f"[NotificationService] Received event: {event_type}, payload: {payload}")
 
-            def callback(ch, method, properties, body):
-                try:
-                    event = json.loads(body.decode('utf-8'))
-                    event_type = event.get("type")
-                    payload = event.get("payload", {})
-                    print(f"[NotificationService] Received event: {event_type}, payload: {payload}")
+            if event_type == "PrescriptionStatusUpdated" and payload.get("status") == "INCOMPLETE":
+                incomplete_prescriptions.append({
+                    "prescription_group_id": payload["prescription_group_id"],
+                    "timestamp": datetime.utcnow().isoformat(),  # Convert to string for JSON serialization
+                })
 
-                    if event_type == "PrescriptionCreated":
-                        # For demonstration, do nothing here. Or you could track newly created prescription.
-                        pass
-
-                    elif event_type == "PrescriptionStatusUpdated":
-                        if payload.get("status") == "INCOMPLETE":
-                            incomplete_prescriptions.append({
-                                "prescription_group_id": payload["prescription_group_id"],
-                                "timestamp": datetime.utcnow(),
-                            })
-                        else:
-                            # If it was completed, remove from incomplete if found
-                            existing = [p for p in incomplete_prescriptions if p["prescription_group_id"] == payload["prescription_group_id"]]
-                            for ex in existing:
-                                incomplete_prescriptions.remove(ex)
-                    
-                    # Acknowledge the message
-                    ch.basic_ack(delivery_tag=method.delivery_tag)
-                except Exception as e:
-                    print(f"Error processing event message: {e}")
-                    # Optionally, we could do a negative ack or requeue
-                    ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-
-            channel.basic_consume(queue='prescription_events', on_message_callback=callback)
-            print("[NotificationService] Waiting for messages from 'prescription_events'...")
-            channel.start_consuming()
-            
-        except pika.exceptions.AMQPConnectionError as e:
-            print(f"[NotificationService] Failed to connect to RabbitMQ: {e}")
-            print("[NotificationService] Retrying in 5 seconds...")
-            time.sleep(5)
         except Exception as e:
-            print(f"[NotificationService] Unexpected error: {e}")
+            print(f"Error processing message: {e}")
+
+async def consume_prescription_events():
+    """Continuously consume events from 'prescription_events' queue."""
+    while True:
+        try:
+            # Connect to RabbitMQ with credentials and explicit port
+            connection = await aio_pika.connect_robust(
+                f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASSWORD}@{RABBITMQ_HOST}:5672/"
+            )
+            
+            # Create channel
+            channel = await connection.channel()
+            
+            # Declare queue
+            queue = await channel.declare_queue(
+                "prescription_events",
+                durable=True
+            )
+
+            print("[NotificationService] Connected to RabbitMQ, waiting for messages...")
+            
+            # Start consuming messages
+            await queue.consume(process_message)
+            
+            # Keep connection alive
+            try:
+                await asyncio.Future()  # run forever
+            finally:
+                await connection.close()
+
+        except Exception as e:
+            print(f"[NotificationService] Connection error: {e}")
             print("[NotificationService] Retrying in 5 seconds...")
-            time.sleep(5)
+            await asyncio.sleep(5)
 
-def send_daily_incomplete_report():
-    """Called daily at 1:00 AM. Emails or logs the incomplete prescriptions."""
-    print(f"[NotificationService] Running daily incomplete report at {datetime.now()}")
+@app.on_event("startup")
+async def startup_event():
+    # Start the consumer in the background
+    asyncio.create_task(consume_prescription_events())
 
-    # In a real scenario: group by pharmacy, send an actual email.
-    # For demonstration, we just log them:
-    if not incomplete_prescriptions:
-        print("[NotificationService] No incomplete prescriptions to report today.")
-        return
-
-    print("[NotificationService] The following prescriptions are still incomplete:")
-    for p in incomplete_prescriptions:
-        print(f"  - ID: {p['prescription_group_id']} (marked incomplete at {p['timestamp']})")
-
-    # Example: you could also re-check the DB to confirm if they are still incomplete
-
-# APScheduler background scheduler
-scheduler = BackgroundScheduler()
-# Schedule daily at 01:00 
-scheduler.add_job(send_daily_incomplete_report, 'cron', hour=1, minute=0)
-scheduler.start()
-
-# We'll run the consumer in a separate thread so it doesn't block.
-import threading
-
-consumer_thread = threading.Thread(target=consume_prescription_events, daemon=True)
-consumer_thread.start()
+@app.get("/notifications")
+def get_notifications():
+    return {
+        "incomplete_prescriptions": incomplete_prescriptions,
+        "count": len(incomplete_prescriptions)
+    }
 
 @app.get("/")
 def health_check():
