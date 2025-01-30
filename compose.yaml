@@ -53,6 +53,7 @@ services:
       RABBITMQ_HOST: "${RABBITMQ_HOST}"
       RABBITMQ_USER: "${RABBITMQ_USER}"
       RABBITMQ_PASS: "${RABBITMQ_PASS}"
+      MEDS_SVC_HOST: "http://medicine_service:8000"
 
   # -----------------------
   # 3) Notification Service

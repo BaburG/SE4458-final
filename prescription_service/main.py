@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import os
 import pika
 import json
+import requests
 
 
 # Load environment variables
@@ -22,9 +23,11 @@ CONNECTION_STRING = (
     f"Uid={os.getenv('DB_USER')};"
     f"Pwd={os.getenv('DB_PASSWORD')};"
     "Encrypt=yes;"
-    "TrustServerCertificate=no;"
+    "TrustServerCertificate=yes;"
     "Connection Timeout=30;"
 )
+
+MEDS_SVC_HOST = os.getenv("MEDS_SVC_HOST", "http://localhost:8000")
 
 def create_table():
     try:
@@ -146,51 +149,57 @@ async def get_prescription(prescription_group_id: int):
         raise HTTPException(status_code=500, detail="Failed to retrieve prescription")
 
 
-@app.post("/pharmacy/prescriptions/submit")
-async def submit_prescription_status(prescription_group_id: int, filled_medicines: List[Tuple[str,int]]):
+@app.post("/prescription/submit/{prescription_group_id}")
+async def submit_prescription_status(prescription_group_id: int):
     """
-    Example endpoint: Pharmacy says "We filled these medicines." 
-    If any medicine from the original prescription is missing => 'INCOMPLETE'.
-    Otherwise => 'COMPLETED'.
+    Get the prescription by ID and check medicine existence against the medicine lookup service.
+    Returns lists of filled (existing) and unfilled (non-existing) medicines.
     """
     try:
-        # 1) Fetch all original medicines from DB for that prescription_group_id
         with pyodbc.connect(CONNECTION_STRING) as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""
-                    SELECT medicine_name, quantity
+                    SELECT medicine_name
                     FROM prescriptions
                     WHERE prescription_group_id = ?
                 """, (prescription_group_id,))
-                original_rows = cursor.fetchall()
-                if not original_rows:
+                
+                results = cursor.fetchall()
+                if not results:
                     raise HTTPException(status_code=404, detail="Prescription not found")
 
-                original_set = {(r[0], r[1]) for r in original_rows}
-                filled_set = {(m[0], m[1]) for m in filled_medicines}
+                all_medicines = [row[0] for row in results]
+                
+                lookup_response = requests.post(
+                    f"{MEDS_SVC_HOST}/find-medicines",
+                    json={"names": all_medicines}
+                )
+                
+                if lookup_response.status_code != 200:
+                    raise HTTPException(status_code=500, detail="Failed to verify medicines")
+                
+                lookup_data = lookup_response.json()
+                
+                # Use the lookup results to determine filled/unfilled
+                filled_medicines = lookup_data["existing_medicines"]
+                unfilled_medicines = lookup_data["non_existing_medicines"]
+                
+                status = "COMPLETED" if not unfilled_medicines else "INCOMPLETE"
 
-                # A naive check: if filled matches original_set exactly => COMPLETED
-                # Otherwise => INCOMPLETE
-                status = "INCOMPLETE"
-                if filled_set == original_set:
-                    status = "COMPLETED"
+                # Publish event about unfilled medicines
+                if unfilled_medicines:
+                    publish_event("UnfilledPrescription", {
+                        "prescription_group_id": prescription_group_id,
+                        "unfilled_medicines": unfilled_medicines
+                    })
 
-                # Here you might update the DB with the status, or store
-                # the "quantity_filled" for each item, etc. 
-                # For example, let's assume we have a 'status' column somewhere:
-                # (You might need a separate table. This is just a placeholder.)
-                # cursor.execute("UPDATE prescriptions SET status = ? WHERE prescription_group_id = ?",
-                #               (status, prescription_group_id))
-                # conn.commit()
-
-        # Publish an event about the final status
-        publish_event("PrescriptionStatusUpdated", {
-            "prescription_group_id": prescription_group_id,
-            "status": status
-        })
-
-        return {"status": status, "prescription_group_id": prescription_group_id}
+                return {
+                    "status": status,
+                    "prescription_group_id": prescription_group_id,
+                    "filled_medicines": filled_medicines,
+                    "unfilled_medicines": unfilled_medicines
+                }
 
     except Exception as e:
         print(f"Error in submit_prescription_status: {e}")
-        raise HTTPException(status_code=500, detail="Failed to update prescription status")
+        raise HTTPException(status_code=500, detail="Failed to submit prescription status")

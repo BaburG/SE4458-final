@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/prescription': {
-        target: 'http://localhost:8001',
+        target: 'http://prescription_service:8000',
         changeOrigin: true,
         secure: false,
       },

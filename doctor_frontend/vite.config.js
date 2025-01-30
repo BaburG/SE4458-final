@@ -7,12 +7,12 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://medicine_service:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
       },
       '/prescription': {
-        target: 'http://127.0.0.1:8001',
+        target: 'http://prescription_service:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/prescription/, '')
       }

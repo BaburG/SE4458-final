@@ -22,6 +22,13 @@ interface PrescriptionResponse {
   medications: Medication[];
 }
 
+interface SubmissionResponse {
+  status: string;
+  prescription_group_id: number;
+  filled_medicines: string[];
+  unfilled_medicines: string[];
+}
+
 const theme: MantineThemeOverride = createTheme({
   primaryColor: 'blue',
   colors: {
@@ -67,6 +74,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [prescriptionData, setPrescriptionData] = useState<PrescriptionResponse | null>(null);
+  const [submissionData, setSubmissionData] = useState<SubmissionResponse | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,6 +90,23 @@ function App() {
       setError('Prescription not found. Please check the ID and try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePrescriptionSubmit = async () => {
+    if (!prescriptionData) return;
+    
+    setSubmitting(true);
+    setError('');
+    setSubmissionData(null);
+
+    try {
+      const response = await api.post(`/prescription/submit/${prescriptionId}`);
+      setSubmissionData(response.data);
+    } catch (err) {
+      setError('Failed to submit prescription. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -207,7 +233,68 @@ function App() {
                     ))}
                   </tbody>
                 </Table>
+
+                <Button
+                  onClick={handlePrescriptionSubmit}
+                  loading={submitting}
+                  size="md"
+                  mt="xl"
+                  radius="md"
+                  className="submit-button"
+                  style={{
+                    backgroundColor: '#4c6ef5',
+                    height: '45px',
+                    transition: 'all 0.2s ease',
+                  }}
+                  styles={{
+                    root: {
+                      '&:hover': {
+                        backgroundColor: '#4263eb',
+                        transform: 'translateY(-1px)',
+                        boxShadow: '0 4px 12px rgba(76, 110, 245, 0.2)',
+                      },
+                    },
+                  }}
+                >
+                  {submitting ? <Loader size="sm" color="white" /> : 'Submit Prescription'}
+                </Button>
               </div>
+
+              {submissionData && (
+                <Paper shadow="sm" p={30} radius="lg" mt="xl" className="submission-results">
+                  <Alert
+                    color="green"
+                    radius="md"
+                    mb={20}
+                    title="Prescription Submitted"
+                    icon="✓"
+                  >
+                    Prescription has been processed successfully.
+                  </Alert>
+                  
+                  {submissionData.filled_medicines.length > 0 && (
+                    <>
+                      <Text fw={700} size="lg" mb={10}>Filled Medicines:</Text>
+                      <ul style={{ marginBottom: 20 }}>
+                        {submissionData.filled_medicines.map((medicine, index) => (
+                          <li key={index}>{medicine}</li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                  
+                  {submissionData.unfilled_medicines.length > 0 && (
+                    <>
+                      <Text fw={700} size="lg" mb={10}>Unfilled Medicines:</Text>
+                      <ul>
+                        {submissionData.unfilled_medicines.map((medicine, index) => (
+                          <li key={index}>{medicine}</li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </Paper>
+              )}
             </div>
           )}
         </Paper>
